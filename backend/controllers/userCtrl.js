@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import { generateToken } from "../config/jwt.js";
 import { generateRefeshToken } from "../config/refreshToken.js";
 import jwt from "jsonwebtoken";
+import { sendEmail } from "./emailCtrl.js";
 export const createUser = errorHandler(async (req, res, next) => {
   const { firstname, lastname, email, phone, password } = req.body;
   const findUser = await usermodel.findOne({ email: email });
@@ -214,6 +215,68 @@ export const updatePassword = errorHandler(async (req, res) => {
     } else {
       throw new Error("User not found");
     }
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+export const forgetPassword = errorHandler(async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await usermodel.findOne({ email: email });
+    if (!user) throw new Error("User not found");
+    const token = await user.createPasswordResetToken();
+    await user.save();
+    const resetURL = ` <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #f0f0f0; background-color: #333; padding: 20px; border-radius: 10px;">
+                    <h2 style="background-color: #444; padding: 10px; text-align: center; color: #fff;">Password Reset Request</h2>
+                    <p>Hi,</p>
+                    <p>Please follow this link to reset your password. This link is valid for 10 minutes only.</p>
+                    <div style="text-align: center; margin: 20px 0;">
+                        <a href="http://localhost:3000/reset-password/${token}" style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #007bff; border-radius: 5px; text-decoration: none;">Reset Password</a>
+                    </div>
+                    <p>If you did not request a password reset, please ignore this email.</p>
+                    <p>Thanks,</p>
+                    <p>Luma Team</p>
+                     <p>Ahsan Rasheed</p>
+                     </div>`;
+    // const resetURL = `Hi, Please follow this link to reset your password. This link is valid for 10 minutes only. <a href="http://localhost:3000/reset-password/${token}">Click Here</a>`;
+    const data = {
+      to: email,
+      htm: resetURL,
+      text: "hi User",
+      subject: "Reset Password",
+    };
+    sendEmail(data);
+    res.json({
+      success: true,
+      token,
+      msg: "Password Reset Link Sent On Your Email",
+    });
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+export const resetPassword = errorHandler(async (req, res) => {
+  const { password } = req.body;
+  const { token } = req.params;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  // const hashedtoken = crypto.createHash("sha256").update(token).digest("hex");
+  // console.log(hashedtoken);
+  try {
+    const user = await usermodel.findOne({
+      passwordResetToken: token,
+      // passwordResetExpires: { $gt: Date.now() },
+    });
+    if (!user) throw new Error("User not found ");
+    user.password = hashedPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+    res.json({
+      success: true,
+      msg: "Password Reset Successful",
+    });
   } catch (error) {
     throw new Error(error);
   }

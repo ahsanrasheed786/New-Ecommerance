@@ -1,7 +1,14 @@
 import errorHandler from "express-async-handler";
 import { productmodel } from "../models/productModel.js";
 import slugify from "slugify";
+import { usermodel } from "../models/userModel.js";
+// import { cloudinaryUpload } from "../utils/cloudnary.js";
+import { cloudinaryUploadImage } from "../utils/cloudnary.js";
+import fs from "fs";
+import { validateMongoDbId } from "../utils/ValidateMongoDbId.js";
+
 //by using the package "slugify" we are able to create a unique slug (-) for our product
+
 export const createProduct = errorHandler(async (req, res) => {
   try {
     // if (!req.body.title) req.body.slug = slugify(req.body.title);
@@ -100,3 +107,164 @@ export const deleteProduct = errorHandler(async (req, res) => {
     throw new Error(error);
   }
 });
+
+export const addToWishList = errorHandler(async (req, res) => {
+  const { id } = req.user;
+  const { productId } = req.body;
+  try {
+    const user = await usermodel.findById(id);
+    if (!user) throw new Error("Please Login First");
+    const alreadyAdded = user.wishlist.find((id) => id == productId);
+    if (alreadyAdded) {
+      //! removing product from wishlist
+      let user = await usermodel.findByIdAndUpdate(
+        id,
+        {
+          $pull: { wishlist: productId },
+        },
+        { new: true }
+      );
+      res.json({
+        success: true,
+        msg: "Product Removed from wishlist",
+        // user,
+      });
+    } else {
+      //! adding product to wishlist
+      let user = await usermodel.findByIdAndUpdate(
+        id,
+        {
+          $push: { wishlist: productId },
+        },
+        { new: true }
+      );
+      res.json({
+        success: true,
+        msg: "Product Added to wishlist",
+        // user,
+      });
+    }
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+//! making a function for counting the reviews of a product and then
+//! i will call it when any user add or updata the review
+
+const ratingCount = errorHandler(async (rating, productId) => {
+  try {
+    const length = rating.length;
+    const sum = rating.reduce((acc, curr) => acc + curr.stars, 0);
+    const avg = sum / length;
+    const star = Math.round(avg);
+    const product = await productmodel.findByIdAndUpdate(productId, {
+      totalRatings: star,
+    });
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+export const addReview = errorHandler(async (req, res) => {
+  const { id } = req.user;
+  const { stars, comment, productId } = req.body;
+  try {
+    const product = await productmodel.findById(productId);
+    if (!product) throw new Error("Product Not Found");
+    let alreadyRated = product.ratings.find((x) => x.postedBy == id);
+    if (alreadyRated) {
+      await productmodel.updateOne(
+        {
+          ratings: { $elemMatch: alreadyRated },
+        },
+        {
+          $set: { "ratings.$.stars": stars, "ratings.$.comment": comment },
+        },
+        { new: true }
+      );
+      //! here i am calling functtion which is counting the rating of a product
+      ratingCount(product.ratings, productId);
+      res.json({ success: true, msg: "Rating Updated" });
+    } else {
+      console.log(id);
+      const newRating = await productmodel.findByIdAndUpdate(
+        productId,
+        {
+          $push: { ratings: { stars, comment, postedBy: id } },
+        },
+        { new: true }
+      );
+      //! here i am calling functtion which is counting the rating of a product
+      ratingCount(product.ratings, productId);
+      res.json({ success: true, msg: "Rating Added", newRating });
+    }
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+// export const uploadImages = async (req, res) => {
+//   const { id } = req.params;
+//   // const filesWithUrlsAndPublicIds = req.uploadedFiles;
+//   validateMongoDbId(id);
+
+//   try {
+//     const uploader = (path) => cloudinaryUploadImage(path, "images");
+//     const urls = [];
+//     const files = req.files;
+
+//     for (const file of files) {
+//       const { path } = file;
+//       const newPath = await uploader(path);
+//       urls.push(newPath);
+//       fs.unlinkSync(path);
+//     }
+
+//     const product = await productmodel.findById(id);
+//     const images = product.images;
+//     const OldAndNewImages = [...images, ...urls];
+//     const updated = await productmodel.findByIdAndUpdate(
+//       id,
+//       {
+//         images: OldAndNewImages,
+//       },
+//       { new: true }
+//     );
+//     res.json(updated);
+//   } catch (error) {
+//     res.status(500).json({ message: error.message, success: false, product });
+//   }
+// };
+
+export const uploadImages = async (req, res) => {
+  const { id } = req.params;
+  // const filesWithUrlsAndPublicIds = req.uploadedFiles;
+  validateMongoDbId(id);
+
+  try {
+    const uploader = (path) => cloudinaryUploadImage(path, "images");
+    const urls = [];
+    const files = req.files;
+
+    for (const file of files) {
+      const { path } = file;
+      const newPath = await uploader(path);
+      urls.push(newPath);
+      fs.unlinkSync(path);
+    }
+
+    const product = await productmodel.findById(id);
+    const images = product.images;
+    const OldAndNewImages = [...images, ...urls];
+    const updated = await productmodel.findByIdAndUpdate(
+      id,
+      {
+        images: OldAndNewImages,
+      },
+      { new: true }
+    );
+    res.json({ success: true, msg: "Images uploaded", updated });
+  } catch (error) {
+    res.status(500).json({ message: error.message, success: false });
+  }
+};

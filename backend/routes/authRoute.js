@@ -11,8 +11,10 @@ import {
   deleteUser,
   findAllUser,
   findSingleUser,
+  forgetPassword,
   handelRefreshToken,
   logOutHander,
+  resetPassword,
   updatePassword,
   updateUser,
   userLogIn,
@@ -28,5 +30,7 @@ router.patch("/block-user/:id", isAdmin, blockAndUnblock);
 router.post("/refresh", handelRefreshToken);
 router.post("/logout", logOutHander);
 router.put("/update-password", authmiddleware, updatePassword);
-
+router.put("/update-password", authmiddleware, updatePassword);
+router.post("/forget-password-token", forgetPassword);
+router.put("/reset-password/:token", resetPassword);
 export default router;

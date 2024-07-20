@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
 
 const userSchema = new mongoose.Schema(
   {
@@ -33,13 +34,16 @@ const userSchema = new mongoose.Schema(
     },
     cart: {
       type: Array,
-      default: [],
+      // default: [],
     },
     refreshToken: {
       type: String,
     },
     address: [{ type: mongoose.Schema.Types.ObjectId, ref: "Address" }],
     wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+    // productViews:{type:Number,default:0},
+    likedBlog: Array,
+    disLikedBlog: Array,
     passwordChangedAt: Date,
     passwordResetToken: String,
     passwordResetExpires: Date,
@@ -59,11 +63,12 @@ userSchema.pre("save", async function (next) {
 // !pasword reset token
 userSchema.methods.createPasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
-  this.passwordResetToken = crypto
-    .createHash("sha256")
-    .update(resetToken)
-    .digest("hex");
-  this.passwordResetExpires = Date.now() + 30 * 60 * 1000;
+  this.passwordResetToken = resetToken;
+  //  crypto
+  //   .createHash("sha256")
+  //   .update(resetToken)
+  //   .digest("hex");
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
   return resetToken;
 };
 export const usermodel = mongoose.model("User", userSchema);
